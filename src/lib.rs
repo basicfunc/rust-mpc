@@ -420,7 +420,7 @@ fn mpc_input_terminated(i: &mpc_input_t) -> bool {
     mpc_input_peekc(i) == '\0'
 }
 
-fn mpc_input_failure(i: &mpc_input_t, ch: char) {
+fn mpc_input_failure(i: &mpc_input_t, ch: char) -> u8 {
     match i.itype {
         MPC_INPUT_FILE => {
             i.file
@@ -436,9 +436,10 @@ fn mpc_input_failure(i: &mpc_input_t, ch: char) {
         }
         _ => (),
     }
+    0
 }
 
-fn mpc_input_success(i: &mut mpc_input_t, c: char, o: Vec<&str>) {
+fn mpc_input_success(i: &mut mpc_input_t, c: char, o: Vec<&str>) -> u8 {
     if i.itype == MPC_INPUT_PIPE && !i.buffer.is_empty() && !mpc_input_buffer_in_range(i) {
         let s = i.buffer.len();
         i.buffer.resize(s + 2, Default::default());
@@ -460,6 +461,98 @@ fn mpc_input_success(i: &mut mpc_input_t, c: char, o: Vec<&str>) {
         // TODO
         unimplemented!()
     }
+    1
+}
+
+fn mpc_input_any(i: &mut mpc_input_t, o: Vec<&str>) -> u8 {
+    if mpc_input_terminated(i) {
+        0
+    } else {
+        mpc_input_success(i, mpc_input_getc(i), o)
+    }
+}
+
+fn mpc_input_char(i: &mut mpc_input_t, c: char, o: Vec<&str>) -> u8 {
+    if mpc_input_terminated(i) {
+        return 0;
+    }
+    let x = mpc_input_getc(i);
+
+    return if x == c {
+        mpc_input_success(i, x, o)
+    } else {
+        mpc_input_failure(i, c)
+    };
+}
+
+fn mpc_input_range(i: &mut mpc_input_t, c: char, d: char, o: Vec<&str>) -> u8 {
+    if mpc_input_terminated(i) {
+        return 0;
+    }
+
+    let x = mpc_input_getc(i);
+
+    return if x >= c && x <= d {
+        mpc_input_success(i, x, o)
+    } else {
+        mpc_input_failure(i, x)
+    };
+}
+
+fn mpc_input_oneof(i: &mut mpc_input_t, c: &str, o: Vec<&str>) -> u8 {
+    if mpc_input_terminated(i) {
+        return 0;
+    }
+
+    let x = mpc_input_getc(i);
+    return if c.contains(x) {
+        mpc_input_success(i, x, o)
+    } else {
+        mpc_input_failure(i, x)
+    };
+}
+
+fn mpc_input_noneof(i: &mut mpc_input_t, c: &str, o: Vec<&str>) -> u8 {
+    if mpc_input_terminated(i) {
+        return 0;
+    }
+
+    let x = mpc_input_getc(i);
+    return if !c.contains(x) {
+        mpc_input_success(i, x, o)
+    } else {
+        mpc_input_failure(i, x)
+    };
+}
+
+fn mpc_input_satisfy(i: &mut mpc_input_t, cond: fn(char) -> bool, o: Vec<&str>) -> u8 {
+    if mpc_input_terminated(i) {
+        return 0;
+    }
+
+    let x = mpc_input_getc(i);
+
+    return if cond(x) {
+        mpc_input_success(i, x, o)
+    } else {
+        mpc_input_failure(i, x)
+    };
+}
+
+fn mpc_input_string(i: &mut mpc_input_t, c: &str, o: Vec<&str>) -> u8 {
+    let x = Box::new(c);
+
+    mpc_input_mark(i);
+
+    unimplemented!();
+
+    mpc_input_unmark(i);
+
+    return 1;
+}
+
+fn mpc_input_anchor(i: &mpc_input_t, f: fn(char, char) -> u8, o: Vec<Option<&str>>) -> u8 {
+    f(i.last, mpc_input_peekc(i))
 }
 
 // Error Type
